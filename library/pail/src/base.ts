@@ -1,9 +1,16 @@
-/**
- * supported HTTP methods
- */
-export type HttpMethod = 'GET' | 'POST' | 'PUT' | 'PATCH' | 'DELETE' | 'HEAD' | 'OPTIONS'
+import type {
+  IFetchResponseHandler,
+  IFetchBaseContext,
+  IFetchRequest,
+  FetchPipelineCondition,
+  FetchPipeline,
+  HttpMethod,
+} from './interface'
 
 export const _helpers = {
+  ensureBasePath(baseUrl: string): string {
+    return baseUrl.replace(/\/*$/, '/') // make sure it always has trailing slashes for ease of configuration
+  },
   /**
    * Parses the query parameters and returns a string representation.
    *
@@ -53,96 +60,6 @@ export const _helpers = {
   },
 }
 
-/**
- * base service's context
- */
-export interface IFetchBaseContext {
-  /**
-   * base url for constructing the final url
-   */
-  baseUrl: string
-
-  /**
-   * base headers those will be used to merged for
-   * every requests
-   */
-  headers: Record<string, string | undefined>
-}
-
-export interface IFetchRequest {
-  /**
-   * the request method
-   */
-  method: HttpMethod
-  /**
-   * the URL path to be merged with the give `baseUrl`
-   */
-  url: string
-
-  /**
-   * query paramter for this specific request
-   */
-  queryParams: Record<string, any>
-
-  /**
-   * the body object to return
-   */
-  body?: BodyInit
-
-  /**
-   * this request's additonal headers
-   */
-  headers: Record<string, string | undefined>
-
-  /**
-   * the response handler
-   */
-  withResponse: Partial<IFetchResponseHandler>
-}
-
-export interface IFetchResponseHandler {
-  /**
-   * evaluate if given response is an error
-   *
-   * @default (response) => `${response.status}`.startWith('2')
-   */
-  isSuccess: (response: Response) => boolean
-
-  /**
-   * if isSuccess() is true; parse the success input
-   *
-   * this callback can be used to validate the success of these input! e.g. using zod
-   *
-   * by default this will return the plain/text unless content-type is application/json
-   */
-  onMarshalSuccess: <T>(response: Response) => Promise<T>
-
-  /**
-   * if isSuccess() is false; parse the resonse body as Error object
-   *
-   * this callback can be used to validate the error of these input! e.g. using zod
-   *
-   * by default this will return the plain/text regardless of the content-type.
-   */
-  onMarshalError: (response: Response) => Promise<Error>
-
-  /**
-   * parse if given input is in an error state?
-   *
-   * @default (response) => false
-   */
-  shouldRetry: (response: Response) => boolean
-
-  /**
-   * if shouldRetry is true, this will be called
-   *
-   * by default onRetry is disabled.
-   *
-   * @default () => undefined
-   */
-  onRetry: (responseBody: Response, originalOp: _FetchBuilderOp) => Error | undefined
-}
-
 const __defaultFetchOpContext: IFetchResponseHandler = {
   isSuccess: (response) => `${response.status}`.startsWith('2'),
   onMarshalSuccess: (response) => {
@@ -156,10 +73,6 @@ const __defaultFetchOpContext: IFetchResponseHandler = {
   shouldRetry: () => false,
   onRetry: () => undefined,
 }
-
-export type FetchPipeline = (fetchContext: IFetchRequest & IFetchBaseContext) => IFetchRequest & IFetchBaseContext
-
-export type FetchPipelineCondition = (fetchContext: IFetchRequest & IFetchBaseContext) => boolean
 
 /**
  * Introduce a base builder for every request
@@ -183,7 +96,7 @@ export type FetchPipelineCondition = (fetchContext: IFetchRequest & IFetchBaseCo
  *    protected pail: Pail
  *
  *    constructor() {
- *	this.pail = Pail.create()
+ *	this.pail = Pail.create('https://api.coincap.io/v2/')
  *	  .use((c) => c.method !== 'POST', bearerToken(() => "some-token"))
  *	  .use((fetchContext) => {
  *	  })
@@ -200,6 +113,9 @@ export type FetchPipelineCondition = (fetchContext: IFetchRequest & IFetchBaseCo
 export class Pail {
   protected constructor(protected context: IFetchBaseContext) {}
 
+  /**
+   * create a pail (base fetch builder)
+   */
   public static create(baseUrl: string) {
     return new Pail({
       baseUrl,
@@ -300,11 +216,31 @@ export class _FetchBuilderOp extends Pail {
     // run fetch and perform retry if necessary
     const url = _helpers.cleanUrl(this.context.url ?? '', this.context.baseUrl ?? '', this.context.queryParams || {})
     const method = this.context.method
-    const out = await fetch(url, {
+    const _body = this.context.body || undefined
+    const opHeaders: Record<string, string | undefined> = {}
+    if (_body) {
+      const contentType =
+        _body instanceof FormData
+          ? 'multipart/form-data'
+          : _body instanceof URLSearchParams
+            ? 'application/x-www-form-urlencoded'
+            : typeof _body === 'string'
+              ? 'text/plain'
+              : 'application/json'
+      opHeaders['content-type'] = contentType
+    }
+    const requestInit: RequestInit = {
       method,
-      headers: _helpers.cleanHeaders(this.context.headers || {}),
+      headers: _helpers.cleanHeaders(this.context.headers || {}, opHeaders),
       body: this.context?.body,
-    })
+    }
+    console.log('Fetching on', requestInit)
+    const out = await fetch(url, requestInit)
+    const isSuccess = this.context.withResponse.isSuccess(out)
+    if (!isSuccess) {
+      // TODO: Handler error
+      throw new Error(`API response is errornous on ${url.toString()} due to: ${JSON.stringify(requestInit)}`)
+    }
     return out
   }
 }

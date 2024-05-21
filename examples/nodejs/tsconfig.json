@@ -1,0 +1,15 @@
+{
+  "extends": "@repo/typescript-config/base.json",
+  "compilerOptions": {
+    "lib": ["es2022"],
+    "baseUrl": ".",
+    "paths": {
+      "@muze/pail": ["../../library/pail/src/*"]
+    },
+    "outDir": "./dist"
+  },
+  "innclude": [
+    "src/*.ts"
+  ],
+  "exclude": ["node_modules"]
+}

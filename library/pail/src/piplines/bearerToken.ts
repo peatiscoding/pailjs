@@ -1,4 +1,4 @@
-import { FetchPipeline } from '..'
+import type { FetchPipeline } from '../interface'
 
 /**
  * # Configure the token
