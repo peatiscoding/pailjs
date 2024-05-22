@@ -1,12 +1,13 @@
 {
-  "name": "@muze/pail",
+  "name": "pailjs",
   "version": "0.0.1",
   "main": "dist/index.js",
   "module": "dist/indext.js",
   "scripts": {
     "build": "tsc",
     "lint": "eslint . --max-warnings 0",
-    "test": "jest --config ./jest.config.js"
+    "test": "jest --config ./jest.config.js",
+    "publish": "pnpm publish --access public"
   },
   "devDependencies": {
     "@next/eslint-plugin-next": "^14.1.1",

@@ -5,6 +5,6 @@
 	"scripts": {
 	},
 	"dependencies": {
-		"@muze/pail": "workspace:*"
+		"pailjs": "workspace:*"
 	}
 }

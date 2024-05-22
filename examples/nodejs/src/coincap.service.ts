@@ -1,4 +1,4 @@
-import { Pail, bearerToken } from '@muze/pail'
+import { Pail, bearerToken } from 'pailjs'
 
 export class CoinCapService {
   protected pail: Pail
