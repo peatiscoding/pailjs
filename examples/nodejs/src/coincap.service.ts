@@ -7,7 +7,8 @@ export class CoinCapService {
     this.pail = Pail.create('https://api.coincap.io/v2').use(bearerToken(() => 'some-token'))
   }
 
-  public async getUser(id: string) {
-    const result = await this.pail.get(`/users/${id}`).fetch()
+  public async assets(): Promise<any> {
+    const result = await this.pail.get(`/assets`).fetch()
+    return result
   }
 }

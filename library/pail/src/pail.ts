@@ -1,13 +1,44 @@
 import type {
-  IFetchResponseHandler,
   IFetchBaseContext,
   IFetchRequest,
   FetchPipelineCondition,
   FetchPipeline,
   HttpMethod,
+  HttpBody,
+  IFetchBuilderOp,
 } from './interface'
 
 export const _helpers = {
+  /**
+   * identify the proper payload of body, and it corresponding content type
+   */
+  cleanBody(_body?: HttpBody): { payload: BodyInit; contentType: string } | undefined {
+    if (!_body) {
+      return undefined
+    }
+    const body =
+      typeof _body === 'string' ||
+      _body instanceof FormData ||
+      _body instanceof URLSearchParams ||
+      _body instanceof ReadableStream ||
+      _body instanceof Blob
+        ? _body
+        : JSON.stringify(_body)
+    const contentType =
+      _body instanceof FormData
+        ? 'multipart/form-data'
+        : _body instanceof URLSearchParams
+          ? 'application/x-www-form-urlencoded'
+          : typeof _body === 'string'
+            ? 'text/plain'
+            : 'application/json'
+    return {
+      payload: body,
+      contentType: contentType,
+    }
+  },
+  /**
+   */
   ensureBasePath(baseUrl: string): string {
     return baseUrl.replace(/\/*$/, '/') // make sure it always has trailing slashes for ease of configuration
   },
@@ -60,20 +91,6 @@ export const _helpers = {
   },
 }
 
-const __defaultFetchOpContext: IFetchResponseHandler = {
-  isSuccess: (response) => `${response.status}`.startsWith('2'),
-  onMarshalSuccess: (response) => {
-    const isJson = response.headers.get('content-type')?.startsWith('application/json')
-    return isJson ? response.json() : response.text()
-  },
-  onMarshalError: async (response) => {
-    const txt = await response.text()
-    return new Error(`${response.status}: ${txt}`)
-  },
-  shouldRetry: () => false,
-  onRetry: () => undefined,
-}
-
 /**
  * Introduce a base builder for every request
  *
@@ -110,8 +127,8 @@ const __defaultFetchOpContext: IFetchResponseHandler = {
  * }
  * ```
  */
-export class Pail {
-  protected constructor(protected context: IFetchBaseContext) {}
+export class Pail<T = Response> {
+  protected constructor(protected context: IFetchBaseContext<T>) {}
 
   /**
    * create a pail (base fetch builder)
@@ -120,6 +137,15 @@ export class Pail {
     return new Pail({
       baseUrl,
       headers: {},
+      onValidateHttpStatus: (status) => (status >= 200 && status < 300 ? 'ok' : 'error'),
+      onMarshalHttpStatusError: async (response) => {
+        const txt = await response.text()
+        return new Error(txt)
+      },
+      onRetry: async (_response, op, _err) => {
+        return op
+      },
+      onMarshalResponseBody: [],
     })
   }
 
@@ -137,27 +163,39 @@ export class Pail {
     return this
   }
 
-  public get(url: string, queryParams?: Record<string, any>): _FetchBuilderOp {
+  /**
+   * type morphing for ease of type script conversion
+   */
+  public marshal<O>(fn: (result: T, response: Response) => Promise<O>): Pail<O> {
+    this.context.onMarshalResponseBody.push(fn as any)
+    return this as any
+  }
+
+  public delete(url: string, queryParams?: Record<string, any>): _FetchBuilderOp<T> {
+    return this._createOpWithNobody('DELETE', url, queryParams)
+  }
+
+  public get(url: string, queryParams?: Record<string, any>): _FetchBuilderOp<T> {
     return this._createOpWithNobody('GET', url, queryParams)
   }
 
-  public head(url: string, queryParams?: Record<string, any>): _FetchBuilderOp {
+  public head(url: string, queryParams?: Record<string, any>): _FetchBuilderOp<T> {
     return this._createOpWithNobody('HEAD', url, queryParams)
   }
 
-  public options(url: string, queryParams?: Record<string, any>): _FetchBuilderOp {
+  public options(url: string, queryParams?: Record<string, any>): _FetchBuilderOp<T> {
     return this._createOpWithNobody('OPTIONS', url, queryParams)
   }
 
-  public post(url: string, queryParams: Record<string, any>, body: BodyInit): _FetchBuilderOp {
+  public post(url: string, queryParams: Record<string, any>, body: HttpBody): _FetchBuilderOp<T> {
     return this._createOpWithBody('POST', url, queryParams || {}, body)
   }
 
-  public put(url: string, queryParams: Record<string, any>, body: BodyInit): _FetchBuilderOp {
+  public put(url: string, queryParams: Record<string, any>, body: HttpBody): _FetchBuilderOp<T> {
     return this._createOpWithBody('PUT', url, queryParams || {}, body)
   }
 
-  public patch(url: string, queryParams: Record<string, any>, body: BodyInit): _FetchBuilderOp {
+  public patch(url: string, queryParams: Record<string, any>, body: HttpBody): _FetchBuilderOp<T> {
     return this._createOpWithBody('PATCH', url, queryParams || {}, body)
   }
 
@@ -165,15 +203,15 @@ export class Pail {
     method: HttpMethod,
     url: string,
     queryParams?: Record<string, any>,
-    body?: BodyInit,
-  ): IFetchRequest & IFetchBaseContext {
-    let c: IFetchRequest & IFetchBaseContext = {
+    body?: HttpBody,
+  ): IFetchRequest<T> {
+    let c: IFetchRequest<T> = {
       ...this.context,
       method,
       url,
       queryParams: queryParams ?? {},
       body,
-      withResponse: __defaultFetchOpContext,
+      onMarshalResponseBody: [...this.context.onMarshalResponseBody],
     }
     for (let i = 0; i < this.pipelines.length; i++) {
       const a = this.pipelines[i]
@@ -192,7 +230,7 @@ export class Pail {
     method: 'GET' | 'DELETE' | 'HEAD' | 'OPTIONS',
     url: string,
     queryParams?: Record<string, any>,
-  ): _FetchBuilderOp {
+  ): _FetchBuilderOp<T> {
     return new _FetchBuilderOp(this._compile(method, url, queryParams))
   }
 
@@ -200,47 +238,67 @@ export class Pail {
     method: 'POST' | 'PATCH' | 'PUT',
     url: string,
     queryParams: Record<string, any>,
-    body: BodyInit,
-  ): _FetchBuilderOp {
+    body: HttpBody,
+  ): _FetchBuilderOp<T> {
     return new _FetchBuilderOp(this._compile(method, url, queryParams, body))
   }
 }
 
-export class _FetchBuilderOp extends Pail {
-  public constructor(protected context: IFetchRequest & IFetchBaseContext) {
-    super(context)
+export class _FetchBuilderOp<T = Response> implements IFetchBuilderOp<T> {
+  public constructor(
+    public readonly context: IFetchRequest<T>,
+    public verbose = false,
+  ) {}
+
+  /**
+   * add marshal function to morph the response to new Type <T>
+   */
+  public marshal<D>(fn: (payload: T, response: Response) => Promise<D>): _FetchBuilderOp<D> {
+    this.context.onMarshalResponseBody.push(fn as any)
+    return this as any
   }
 
-  public async fetch(): Promise<any> {
+  public async fetch(): Promise<T> {
     // compile options for calling fetch
     // run fetch and perform retry if necessary
     const url = _helpers.cleanUrl(this.context.url ?? '', this.context.baseUrl ?? '', this.context.queryParams || {})
     const method = this.context.method
-    const _body = this.context.body || undefined
+    const body = _helpers.cleanBody(this.context.body || undefined)
     const opHeaders: Record<string, string | undefined> = {}
-    if (_body) {
-      const contentType =
-        _body instanceof FormData
-          ? 'multipart/form-data'
-          : _body instanceof URLSearchParams
-            ? 'application/x-www-form-urlencoded'
-            : typeof _body === 'string'
-              ? 'text/plain'
-              : 'application/json'
-      opHeaders['content-type'] = contentType
+    if (body) {
+      opHeaders['Content-Type'] = body.contentType
     }
     const requestInit: RequestInit = {
       method,
       headers: _helpers.cleanHeaders(this.context.headers || {}, opHeaders),
-      body: this.context?.body,
+      body: body?.payload,
     }
-    console.log('Fetching on', requestInit)
+    if (this.verbose) {
+      console.log('Fetching on', requestInit)
+    }
     const out = await fetch(url, requestInit)
-    const isSuccess = this.context.withResponse.isSuccess(out)
-    if (!isSuccess) {
-      // TODO: Handler error
-      throw new Error(`API response is errornous on ${url.toString()} due to: ${JSON.stringify(requestInit)}`)
+    const res = this.context.onValidateHttpStatus(out.status, out)
+    if (res === 'error' || res === 'should-retry') {
+      const err = await this.context.onMarshalHttpStatusError(out)
+      if (res === 'should-retry' && this.context.onRetry) {
+        const newOp = await this.context.onRetry(out, this, err)
+        if (newOp) {
+          return newOp.fetch()
+        }
+      }
+      throw err
     }
-    return out
+
+    const parsers = this.context.onMarshalResponseBody
+    // default
+    if (parsers.length === 0) {
+      return out as T
+    }
+    let result: any = out
+    console.log('Parsers', parsers)
+    for (const p of parsers) {
+      result = await p(result, out)
+    }
+    return result
   }
 }

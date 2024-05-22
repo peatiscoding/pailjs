@@ -3,10 +3,12 @@
  */
 export type HttpMethod = 'GET' | 'POST' | 'PUT' | 'PATCH' | 'DELETE' | 'HEAD' | 'OPTIONS'
 
+export type HttpBody = FormData | URLSearchParams | ReadableStream | string | Record<string, any>
+
 /**
  * base service's context
  */
-export interface IFetchBaseContext {
+export interface IFetchBaseContext<T> {
   /**
    * base url for constructing the final url
    */
@@ -17,9 +19,43 @@ export interface IFetchBaseContext {
    * every requests
    */
   headers: Record<string, string | undefined>
+
+  /**
+   * Perform Http Status Code Validation
+   *
+   * @default (responseStatus, _response) => responseStatus >= 200 && responseStatus < 300 ? 'ok' : 'error'
+   */
+  onValidateHttpStatus: (responseStatus: Response['status'], response: Response) => 'ok' | 'error' | 'should-retry'
+
+  /**
+   * if onValidateHttpStatus() is 'error'; parse the resonse body as Error object
+   *
+   * by default this will return the plain/text regardless of the content-type.
+   *
+   * @default (response) => response.text()
+   */
+  onMarshalHttpStatusError: (response: Response) => Promise<Error>
+
+  /**
+   * if onValidateHttpStatus() is 'should-retry'; parse the resonse body as Error object
+   *
+   * if you wish to give up; return falsy value (undefined)
+   */
+  onRetry(responseBody: Response, originalOp: IFetchBuilderOp<T>, error: Error): Promise<IFetchBuilderOp<T> | undefined>
+
+  /**
+   * if onValidateHttpStatus() is 'ok'; parse the resonse body
+   *
+   * this callback can be used to validate the success of these input! e.g. using zod
+   *
+   * if given result is not as needed; or falsy (contains 'error' node) throw error instead of resolve it.
+   *
+   * by default this will return the plain/text unless content-type is application/json
+   */
+  onMarshalResponseBody: (<O = T>(result: T, response: Response) => Promise<O>)[]
 }
 
-export interface IFetchRequest {
+export interface IFetchRequest<T> extends IFetchBaseContext<T> {
   /**
    * the request method
    */
@@ -37,69 +73,28 @@ export interface IFetchRequest {
   /**
    * the body object to return
    */
-  body?: BodyInit
+  body?: HttpBody
 
   /**
    * this request's additonal headers
    */
   headers: Record<string, string | undefined>
-
-  /**
-   * the response handler
-   */
-  withResponse: IFetchResponseHandler
 }
 
-export interface IFetchBuilderOp {
+export interface IFetchBuilderOp<T> {
+  /**
+   * request's context
+   */
+  context: IFetchRequest<T>
+
   /**
    * perfor the fetch!
    */
-  fetch(): Promise<any>
+  fetch(): Promise<T>
 }
 
-export interface IFetchResponseHandler {
-  /**
-   * evaluate if given response is an error
-   *
-   * @default (response) => `${response.status}`.startWith('2')
-   */
-  isSuccess: (response: Response) => boolean
+export interface IFetchResponseHandler {}
 
-  /**
-   * if isSuccess() is true; parse the success input
-   *
-   * this callback can be used to validate the success of these input! e.g. using zod
-   *
-   * by default this will return the plain/text unless content-type is application/json
-   */
-  onMarshalSuccess: <T>(response: Response) => Promise<T>
+export type FetchPipeline = <T>(fetchContext: IFetchRequest<T>) => IFetchRequest<T>
 
-  /**
-   * if isSuccess() is false; parse the resonse body as Error object
-   *
-   * this callback can be used to validate the error of these input! e.g. using zod
-   *
-   * by default this will return the plain/text regardless of the content-type.
-   */
-  onMarshalError: (response: Response) => Promise<Error>
-
-  /**
-   * parse if given input is in an error state?
-   *
-   * @default (response) => false
-   */
-  shouldRetry: (response: Response) => boolean
-
-  /**
-   * if shouldRetry is true, this will be called
-   *
-   * by default onRetry is disabled.
-   *
-   * @default () => undefined
-   */
-  onRetry: (responseBody: Response, originalOp: IFetchBuilderOp) => Error | undefined
-}
-
-export type FetchPipeline = (fetchContext: IFetchRequest & IFetchBaseContext) => IFetchRequest & IFetchBaseContext
-
-export type FetchPipelineCondition = (fetchContext: IFetchRequest & IFetchBaseContext) => boolean
+export type FetchPipelineCondition = <T>(fetchContext: IFetchRequest<T>) => boolean
