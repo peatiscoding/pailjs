@@ -5,6 +5,10 @@ export type HttpMethod = 'GET' | 'POST' | 'PUT' | 'PATCH' | 'DELETE' | 'HEAD' | 
 
 export type HttpBody = FormData | URLSearchParams | ReadableStream | string | Record<string, any>
 
+export interface MarshalTypeMorpher<I, O> {
+  (input: I, response: Response, op: IFetchBuilderOp<I>): Promise<O>
+}
+
 /**
  * base service's context
  */
@@ -21,29 +25,6 @@ export interface IFetchBaseContext<T> {
   headers: Record<string, string | undefined>
 
   /**
-   * Perform Http Status Code Validation
-   *
-   * @default (responseStatus, _response) => responseStatus >= 200 && responseStatus < 300 ? 'ok' : 'error'
-   */
-  onValidateHttpStatus: (responseStatus: Response['status'], response: Response) => 'ok' | 'error' | 'should-retry'
-
-  /**
-   * if onValidateHttpStatus() is 'error'; parse the resonse body as Error object
-   *
-   * by default this will return the plain/text regardless of the content-type.
-   *
-   * @default (response) => response.text()
-   */
-  onMarshalHttpStatusError: (response: Response) => Promise<Error>
-
-  /**
-   * if onValidateHttpStatus() is 'should-retry'; parse the resonse body as Error object
-   *
-   * if you wish to give up; return falsy value (undefined)
-   */
-  onRetry(responseBody: Response, originalOp: IFetchBuilderOp<T>, error: Error): Promise<IFetchBuilderOp<T> | undefined>
-
-  /**
    * if onValidateHttpStatus() is 'ok'; parse the resonse body
    *
    * this callback can be used to validate the success of these input! e.g. using zod
@@ -52,7 +33,7 @@ export interface IFetchBaseContext<T> {
    *
    * by default this will return the plain/text unless content-type is application/json
    */
-  onMarshalResponseBody: (<O = T>(result: T, response: Response) => Promise<O>)[]
+  onMarshalResponse: MarshalTypeMorpher<T, any>[]
 }
 
 export interface IFetchRequest<T> extends IFetchBaseContext<T> {
@@ -92,8 +73,6 @@ export interface IFetchBuilderOp<T> {
    */
   fetch(): Promise<T>
 }
-
-export interface IFetchResponseHandler {}
 
 export type FetchPipeline = <T>(fetchContext: IFetchRequest<T>) => IFetchRequest<T>
 

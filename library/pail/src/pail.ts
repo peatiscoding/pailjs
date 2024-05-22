@@ -137,15 +137,7 @@ export class Pail<T = Response> {
     return new Pail({
       baseUrl,
       headers: {},
-      onValidateHttpStatus: (status) => (status >= 200 && status < 300 ? 'ok' : 'error'),
-      onMarshalHttpStatusError: async (response) => {
-        const txt = await response.text()
-        return new Error(txt)
-      },
-      onRetry: async (_response, op, _err) => {
-        return op
-      },
-      onMarshalResponseBody: [],
+      onMarshalResponse: [],
     })
   }
 
@@ -166,8 +158,8 @@ export class Pail<T = Response> {
   /**
    * type morphing for ease of type script conversion
    */
-  public marshal<O>(fn: (result: T, response: Response) => Promise<O>): Pail<O> {
-    this.context.onMarshalResponseBody.push(fn as any)
+  public marshal<O>(fn: (result: T, response: Response, op: IFetchBuilderOp<T>) => Promise<O>): Pail<O> {
+    this.context.onMarshalResponse.push(fn as any)
     return this as any
   }
 
@@ -211,7 +203,7 @@ export class Pail<T = Response> {
       url,
       queryParams: queryParams ?? {},
       body,
-      onMarshalResponseBody: [...this.context.onMarshalResponseBody],
+      onMarshalResponse: [...this.context.onMarshalResponse],
     }
     for (let i = 0; i < this.pipelines.length; i++) {
       const a = this.pipelines[i]
@@ -253,8 +245,8 @@ export class _FetchBuilderOp<T = Response> implements IFetchBuilderOp<T> {
   /**
    * add marshal function to morph the response to new Type <T>
    */
-  public marshal<D>(fn: (payload: T, response: Response) => Promise<D>): _FetchBuilderOp<D> {
-    this.context.onMarshalResponseBody.push(fn as any)
+  public marshal<D>(fn: (payload: T, response: Response, op: IFetchBuilderOp<T>) => Promise<D>): _FetchBuilderOp<D> {
+    this.context.onMarshalResponse.push(fn as any)
     return this as any
   }
 
@@ -277,27 +269,11 @@ export class _FetchBuilderOp<T = Response> implements IFetchBuilderOp<T> {
       console.log('Fetching on', requestInit)
     }
     const out = await fetch(url, requestInit)
-    const res = this.context.onValidateHttpStatus(out.status, out)
-    if (res === 'error' || res === 'should-retry') {
-      const err = await this.context.onMarshalHttpStatusError(out)
-      if (res === 'should-retry' && this.context.onRetry) {
-        const newOp = await this.context.onRetry(out, this, err)
-        if (newOp) {
-          return newOp.fetch()
-        }
-      }
-      throw err
-    }
 
-    const parsers = this.context.onMarshalResponseBody
-    // default
-    if (parsers.length === 0) {
-      return out as T
-    }
+    const parsers = this.context.onMarshalResponse
     let result: any = out
-    console.log('Parsers', parsers)
     for (const p of parsers) {
-      result = await p(result, out)
+      result = await p(result, out, this)
     }
     return result
   }

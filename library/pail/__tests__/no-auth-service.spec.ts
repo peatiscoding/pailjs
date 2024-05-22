@@ -1,15 +1,20 @@
-import { Pail } from '../src'
+import { Pail, filterBadHttpStatus, zodSchema } from '../src'
+import { z } from 'zod'
 
 describe('no auth service', () => {
   describe('CoinCapService', () => {
     class CoinCapService {
       pail: Pail
       constructor() {
-        this.pail = Pail.create('https://api.coincap.io/v2/')
+        this.pail = Pail.create('https://api.coincap.io/v2/').marshal(filterBadHttpStatus())
       }
 
       public async assets(): Promise<any> {
         return this.pail.get(`assets`).fetch()
+      }
+
+      public async badHttpServiceCall(): Promise<any> {
+        return this.pail.get(`ddd`).fetch()
       }
     }
 
@@ -26,26 +31,47 @@ describe('no auth service', () => {
       const result = await attempt
       expect(result).toBeTruthy()
     })
+
+    it('will throw error on the bad http response calls', async () => {
+      const attempt = sv.badHttpServiceCall()
+      await expect(attempt).rejects.toThrow()
+    })
   })
 
-  describe('Solana RPC', () => {
+  describe('Solana RPC Service', () => {
     interface SolanaRPCResult<T = any> {
       jsonrpc: string
       id: number
       result?: T
       error?: { message: string }
     }
+
+    const getEpochInfoResponseSchema = z.object({
+      jsonrpc: z.string(),
+      id: z.number(),
+      result: z.object({
+        absoluteSlot: z.number(),
+        blockHeight: z.number(),
+        epoch: z.number(),
+        slotIndex: z.number(),
+        slotsInEpoch: z.number(),
+        transactionCount: z.number(),
+      }),
+    })
+
     class SolanaRPCService {
       pail: Pail<SolanaRPCResult>
 
       public constructor() {
-        this.pail = Pail.create('https://api.devnet.solana.com/').marshal(async (res) => {
-          const json: SolanaRPCResult = await res.json()
-          if (json.error) {
-            throw new Error(json.error.message)
-          }
-          return json
-        })
+        this.pail = Pail.create('https://api.devnet.solana.com/')
+          .marshal(filterBadHttpStatus())
+          .marshal(async (res) => {
+            const json: SolanaRPCResult = await res.json()
+            if (json.error) {
+              throw new Error(json.error.message)
+            }
+            return json
+          })
       }
 
       public getBalance(address: string): Promise<any> {
@@ -63,14 +89,19 @@ describe('no auth service', () => {
           .fetch()
       }
 
-      public getEpochInfo(): Promise<SolanaRPCResult> {
-        return this.pail.post('', {}, { jsonrpc: '2.0', method: 'getEpochInfo', params: [], id: 1 }).fetch()
+      public getEpochInfo(): Promise<z.infer<typeof getEpochInfoResponseSchema>> {
+        return this.pail
+          .post('', {}, { jsonrpc: '2.0', method: 'getEpochInfo', params: [], id: 1 })
+          .marshal(filterBadHttpStatus())
+          .marshal(zodSchema(getEpochInfoResponseSchema))
+          .fetch()
       }
 
       public invalidRpcMethod(): Promise<SolanaRPCResult> {
         return this.pail.post('', {}, { jsonrpc: '2.0', method: 'getUnknownMethod', params: [], id: 1 }).fetch()
       }
     }
+
     let sv: SolanaRPCService
 
     it('can be used to create a simple service', () => {
@@ -92,6 +123,8 @@ describe('no auth service', () => {
       const result = await attempt
       expect(result).toBeTruthy()
       expect(result.jsonrpc).toBe('2.0')
+      expect(result.result).toBeTruthy()
+      expect(typeof result.result?.epoch).toEqual('number')
     })
 
     it('will throw an error for invalid RPC method', async () => {
