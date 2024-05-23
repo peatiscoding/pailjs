@@ -6,7 +6,7 @@ describe('no auth service', () => {
     class CoinCapService {
       pail: Pail
       constructor() {
-        this.pail = Pail.create('https://api.coincap.io/v2/').marshal(filterBadHttpStatus())
+        this.pail = new Pail('https://api.coincap.io/v2/').marshal(filterBadHttpStatus())
       }
 
       public async assets(): Promise<any> {
@@ -63,15 +63,13 @@ describe('no auth service', () => {
       pail: Pail<SolanaRPCResult>
 
       public constructor() {
-        this.pail = Pail.create('https://api.devnet.solana.com/')
-          .marshal(filterBadHttpStatus())
-          .marshal(async (res) => {
-            const json: SolanaRPCResult = await res.json()
-            if (json.error) {
-              throw new Error(json.error.message)
-            }
-            return json
-          })
+        this.pail = new Pail('https://api.devnet.solana.com/').marshal(filterBadHttpStatus()).marshal(async (res) => {
+          const json: SolanaRPCResult = await res.json()
+          if (json.error) {
+            throw new Error(json.error.message)
+          }
+          return json
+        })
       }
 
       public getBalance(address: string): Promise<any> {

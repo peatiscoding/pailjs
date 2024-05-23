@@ -6,6 +6,7 @@ import type {
   HttpMethod,
   HttpBody,
   IFetchBuilderOp,
+  MarshalTypeMorpher,
 } from './interface'
 
 export const _helpers = {
@@ -113,7 +114,7 @@ export const _helpers = {
  *    protected pail: Pail
  *
  *    constructor() {
- *	this.pail = Pail.create('https://api.coincap.io/v2/')
+ *	this.pail = new Pail('https://api.coincap.io/v2/')
  *	  .use((c) => c.method !== 'POST', bearerToken(() => "some-token"))
  *	  .use((fetchContext) => {
  *	  })
@@ -128,24 +129,31 @@ export const _helpers = {
  * ```
  */
 export class Pail<T = Response> {
-  protected constructor(protected context: IFetchBaseContext<T>) {}
-
-  /**
-   * create a pail (base fetch builder)
-   */
-  public static create(baseUrl: string) {
-    return new Pail({
-      baseUrl,
-      headers: {},
-      onMarshalResponse: [],
-    })
-  }
-
   /**
    * never modify this pipeline directly
    */
   protected readonly pipelines: [FetchPipelineCondition | true, FetchPipeline][] = []
 
+  /**
+   * context those has been build up with pipelines via use(), and marshal()
+   */
+  protected context: IFetchBaseContext<T>
+
+  public constructor(
+    baseUrl: string,
+    headers: Record<string, string | undefined> = {},
+    onMarshalResponse: MarshalTypeMorpher<T, any>[] = [],
+  ) {
+    this.context = {
+      baseUrl,
+      headers,
+      onMarshalResponse,
+    }
+  }
+
+  /**
+   * apply the pipeline
+   */
   public use(pipeline: FetchPipeline): this
   public use(condition: FetchPipelineCondition, pipeline: FetchPipeline): this
   use(_conditionOrPipeline: FetchPipeline | FetchPipelineCondition, _pipeline?: FetchPipeline): this {
@@ -238,9 +246,20 @@ export class Pail<T = Response> {
 
 export class _FetchBuilderOp<T = Response> implements IFetchBuilderOp<T> {
   public constructor(
-    public readonly context: IFetchRequest<T>,
+    public context: IFetchRequest<T>,
     public verbose = false,
   ) {}
+
+  /**
+   * Apply the pipeline right away
+   *
+   * Same as `use` method but without condition and only applied to the
+   * compiled context.
+   */
+  public apply(pipeline: FetchPipeline): this {
+    this.context = pipeline(this.context)
+    return this
+  }
 
   /**
    * add marshal function to morph the response to new Type <T>

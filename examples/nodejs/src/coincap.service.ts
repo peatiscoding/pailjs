@@ -4,7 +4,7 @@ export class CoinCapService {
   protected pail: Pail
 
   constructor() {
-    this.pail = Pail.create('https://api.coincap.io/v2').use(bearerToken(() => 'some-token'))
+    this.pail = new Pail('https://api.coincap.io/v2').use(bearerToken(() => 'some-token'))
   }
 
   public async assets(): Promise<any> {

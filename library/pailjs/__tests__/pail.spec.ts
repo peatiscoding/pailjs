@@ -20,7 +20,7 @@ describe('pail', () => {
     })
   })
   it('must be defined', () => {
-    const pail = Pail.create('')
+    const pail = new Pail('')
     expect(pail).toBeTruthy()
   })
 })
