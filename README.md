@@ -2,12 +2,9 @@
 
 ## General 
 
-The Pail service is a wrapper of Fetch [`pailjs`](https://github.com/peatiscoding/pailjs) library. It allows us to use fetch easier.
+The Pail Library is a tiny wrapper of [Fetch](https://nodejs.org/dist/latest-v18.x/docs/api/globals.html) module. It allows us to use fetch easier. (a.k.a. Remove the boilderplate codes.)
 
 ## Concept
-
-General Concept is that we allow [`fetch`](https://nodejs.org/en/blog/announcements/v18-release-announce) to be used in easily. Remove
-the boilderplate codes.
 
 In general every `service` will need.
 
