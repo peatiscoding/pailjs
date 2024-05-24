@@ -18,13 +18,11 @@ Hence we divide our `Pail` object into 2 states.
 
 Once operation is created you can still apply the pipeline per individual operation via `apply` method.
 
-Both operation & pail are Morphable meaning the output type of Pail is morphed based on the `marshal` output type. e.g. using zod to infer the type of the output service object.
+Both `operation` & `pail` are Morphable meaning the output type of them can be morphed based on the `marshal` output type. e.g. using zod to infer the type of the output service object. This feature is our attempt to streamline the return type of the service.
 
 ### Pipeline
 
-To create this **Composable** feature. We use `pipeline` as an entrypoint to build up the fetch's request context object.
-
-This is actually very similar to Axios' request interceptor. Where you can modify the request every time it invoked.
+To create this **Composable** feature. We use `pipeline` as an entrypoint to build up the fetch's request context object. This is actually very similar to Axios' request interceptor. Where you can modify the request every time it invoked.
 
 ### Marshal
 

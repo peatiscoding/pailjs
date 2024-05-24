@@ -213,6 +213,59 @@ export class Pail<T = Response> {
       body,
       onMarshalResponse: [...this.context.onMarshalResponse],
     }
+    return c
+  }
+
+  protected _createOpWithNobody(
+    method: 'GET' | 'DELETE' | 'HEAD' | 'OPTIONS',
+    url: string,
+    queryParams?: Record<string, any>,
+  ): _FetchBuilderOp<T> {
+    return new _FetchBuilderOp(this._compile(method, url, queryParams), [...this.pipelines])
+  }
+
+  protected _createOpWithBody(
+    method: 'POST' | 'PATCH' | 'PUT',
+    url: string,
+    queryParams: Record<string, any>,
+    body: HttpBody,
+  ): _FetchBuilderOp<T> {
+    return new _FetchBuilderOp(this._compile(method, url, queryParams, body), [...this.pipelines])
+  }
+}
+
+export class _FetchBuilderOp<T = Response> implements IFetchBuilderOp<T> {
+  public constructor(
+    public context: IFetchRequest<T>,
+    protected pipelines: [true | FetchPipelineCondition, FetchPipeline][],
+    public verbose = false,
+  ) {}
+
+  /**
+   * Apply the pipeline right away
+   *
+   * register another pipeline per this call.
+   */
+  public apply(...pipelines: FetchPipeline[]): this {
+    for (const pipeline of pipelines) {
+      this.pipelines.push([true, pipeline])
+    }
+    return this
+  }
+
+  /**
+   * add marshal function to morph the response to new Type <T>
+   */
+  public marshal<D>(fn: (payload: T, response: Response, op: IFetchBuilderOp<T>) => Promise<D>): _FetchBuilderOp<D> {
+    this.context.onMarshalResponse.push(fn as any)
+    return this as any
+  }
+
+  /**
+   * Create a fresh copy of context
+   */
+  protected computeContext(): IFetchRequest<T> {
+    let c = { ...this.context }
     for (let i = 0; i < this.pipelines.length; i++) {
       const a = this.pipelines[i]
       if (!a) {
@@ -226,62 +279,20 @@ export class Pail<T = Response> {
     return c
   }
 
-  protected _createOpWithNobody(
-    method: 'GET' | 'DELETE' | 'HEAD' | 'OPTIONS',
-    url: string,
-    queryParams?: Record<string, any>,
-  ): _FetchBuilderOp<T> {
-    return new _FetchBuilderOp(this._compile(method, url, queryParams))
-  }
-
-  protected _createOpWithBody(
-    method: 'POST' | 'PATCH' | 'PUT',
-    url: string,
-    queryParams: Record<string, any>,
-    body: HttpBody,
-  ): _FetchBuilderOp<T> {
-    return new _FetchBuilderOp(this._compile(method, url, queryParams, body))
-  }
-}
-
-export class _FetchBuilderOp<T = Response> implements IFetchBuilderOp<T> {
-  public constructor(
-    public context: IFetchRequest<T>,
-    public verbose = false,
-  ) {}
-
-  /**
-   * Apply the pipeline right away
-   *
-   * Same as `use` method but without condition and only applied to the
-   * compiled context.
-   */
-  public apply(pipeline: FetchPipeline): this {
-    this.context = pipeline(this.context)
-    return this
-  }
-
-  /**
-   * add marshal function to morph the response to new Type <T>
-   */
-  public marshal<D>(fn: (payload: T, response: Response, op: IFetchBuilderOp<T>) => Promise<D>): _FetchBuilderOp<D> {
-    this.context.onMarshalResponse.push(fn as any)
-    return this as any
-  }
-
   public async fetch(): Promise<T> {
     // compile options for calling fetch
     // run fetch and perform retry if necessary
-    const url = _helpers.cleanUrl(this.context.url ?? '', this.context.baseUrl ?? '', this.context.queryParams || {})
-    const method = this.context.method
-    const body = _helpers.cleanBody(this.context.body || undefined)
+    const context = this.computeContext()
+    const url = _helpers.cleanUrl(context.url ?? '', this.context.baseUrl ?? '', this.context.queryParams || {})
+    const method = context.method
+    const body = _helpers.cleanBody(context.body || undefined)
     const opHeaders: Record<string, string | undefined> = {}
     if (body) {
       opHeaders['Content-Type'] = body.contentType
     }
     const requestInit: RequestInit = {
       method,
-      headers: _helpers.cleanHeaders(this.context.headers || {}, opHeaders),
+      headers: _helpers.cleanHeaders(context.headers || {}, opHeaders),
       body: body?.payload,
     }
     if (this.verbose) {
@@ -289,7 +300,7 @@ export class _FetchBuilderOp<T = Response> implements IFetchBuilderOp<T> {
     }
     const out = await fetch(url, requestInit)
 
-    const parsers = this.context.onMarshalResponse
+    const parsers = context.onMarshalResponse
     let result: any = out
     for (const p of parsers) {
       result = await p(result, out, this)
