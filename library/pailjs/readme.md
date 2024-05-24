@@ -38,7 +38,11 @@ const pail = new Pail('https://api.coincap.io/v2/')
 const result = await pail.get(`assets`).fetch()
 ```
 
-This also works with [zod](https://zod.dev/)
+Another a bit more complicate example;
+
+Consider using this [Solana RPC Service](https://solana.com/docs/rpc)
+
+Note: this package also works with [zod](https://zod.dev/)
 
 ```ts
 import { zodSchema, Pail } from 'pailjs'
