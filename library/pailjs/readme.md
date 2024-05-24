@@ -1,4 +1,4 @@
-# Pail
+# Pailjs (Pail 🪣)
 
 ## General 
 

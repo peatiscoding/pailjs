@@ -3,14 +3,42 @@ import { z } from 'zod'
 
 describe('no auth service', () => {
   describe('CoinCapService', () => {
+    const assetsSchema = z.object({
+      data: z.array(
+        z.object({
+          id: z.string(),
+          rank: z.string(),
+          symbol: z.string(),
+          name: z.string(),
+          supply: z.string(),
+          maxSupply: z.string().nullable(),
+          marketCapUsd: z.string(),
+          volumeUsd24Hr: z.string(),
+          priceUsd: z.string(),
+          changePercent24Hr: z.string(),
+          vwap24Hr: z.string(),
+        }),
+      ),
+    })
+
+    type CoinCapAssets = z.infer<typeof assetsSchema>
+
+    /**
+     * @ref https://docs.coincap.io/
+     */
     class CoinCapService {
       pail: Pail
+
       constructor() {
         this.pail = new Pail('https://api.coincap.io/v2/').marshal(filterBadHttpStatus())
       }
 
       public async assets(): Promise<any> {
         return this.pail.get(`assets`).fetch()
+      }
+
+      public async assetsWithZod(): Promise<CoinCapAssets> {
+        return this.pail.get(`assets`).marshal(zodSchema(assetsSchema)).fetch()
       }
 
       public async badHttpServiceCall(): Promise<any> {
@@ -30,6 +58,19 @@ describe('no auth service', () => {
       await expect(attempt).resolves.not.toThrow()
       const result = await attempt
       expect(result).toBeTruthy()
+      // the method doesn't marshal response hence it would return `response` as a output.
+      expect(result instanceof Response).toBeTruthy()
+    })
+
+    it('can fetch teh assets using zod schema', async () => {
+      const attempt = sv.assetsWithZod()
+      await expect(attempt).resolves.not.toThrow()
+      const result = await attempt
+      expect(result).toBeTruthy()
+      // the method doesn't marshal response hence it would return `response` as a output.
+      expect(result.data instanceof Array).toBeTruthy()
+      expect(result.data[0]?.id).toBeTruthy()
+      expect(typeof result.data[0]?.priceUsd).toEqual('string')
     })
 
     it('will throw error on the bad http response calls', async () => {
