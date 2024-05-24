@@ -24,9 +24,15 @@ Both operation & pail are Morphable meaning the output type of Pail is morphed b
 
 To create this **Composable** feature. We use `pipeline` as an entrypoint to build up the fetch's request context object.
 
+This is actually very similar to Axios' request interceptor. Where you can modify the request every time it invoked.
+
+### Marshal
+
+Marshal is similar to pipeline but it is for the output stream. Comparing to the Axios - this is similar to Axios' response interceptor. Plus, the type mapping for the actual end output.
+
 ## Example
 
-Simple service
+Here is a simplest service.
 
 ```ts
 import { Pail, filterBadHttpStatus } from 'pailjs'
