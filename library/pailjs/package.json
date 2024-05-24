@@ -7,7 +7,9 @@
     "build": "tsc",
     "lint": "eslint . --max-warnings 0",
     "test": "jest --config ./jest.config.js",
-    "publish": "pnpm publish --access public"
+    "prepublish": "cp ../../README.md ./README.md",
+    "publish": "pnpm publish --access public",
+    "postpublish": "rm ./README.md"
   },
   "devDependencies": {
     "@next/eslint-plugin-next": "^14.1.1",
