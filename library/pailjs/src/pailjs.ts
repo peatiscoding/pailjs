@@ -1,3 +1,4 @@
+import { RetryRequest } from './errors'
 import type {
   IFetchBaseContext,
   IFetchRequest,
@@ -302,8 +303,16 @@ export class _FetchBuilderOp<T = Response> implements IFetchBuilderOp<T> {
 
     const parsers = context.onMarshalResponse
     let result: any = out
-    for (const p of parsers) {
-      result = await p(result, out, this)
+    try {
+      for (const p of parsers) {
+        result = await p(result, out, this)
+      }
+    } catch (e) {
+      if (e instanceof RetryRequest) {
+        // re-try!
+        return this.fetch()
+      }
+      throw e
     }
     return result
   }

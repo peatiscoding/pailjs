@@ -1,5 +1,5 @@
-import { release } from 'os'
 import type { IFetchBuilderOp, MarshalTypeMorpher } from '../interface'
+import { RetryRequest } from '../errors'
 
 /**
  * perform retry when predicate returns 'true'
@@ -29,41 +29,51 @@ export const retry = <T>(
     }
     // if this retry block is being called from the same operation (already invoke retry, no need to call it again)
     if (retryingOp === op) {
+      // console.warn('trying again on same OP (', op.context.url, ')')
       return result
     }
     // if this retry block is being called from a different operation, (retryingOp is defined; but not the one invoking), block it.
     if (retryingOp) {
+      // console.warn(`blocked ${op.context.url} by pending retryingOp (${retryingOp.context.url})`)
       // Create a fake promise; it will be resolved when the other operation is done.
       const waitForOtherRefresh = new Promise((resolve) => blockedOps.push(resolve))
       const hasRefreshError = await waitForOtherRefresh
+      // console.warn('resumed from retryingOp', op.context.url, hasRefreshError)
       if (hasRefreshError) {
         // Throw the same error on all endpoints
         throw hasRefreshError
       }
       // Otherwise, let's retry all other operations!
-      return op.fetch()
+      throw new RetryRequest()
+      //     return op.fetch()
     }
+
+    // console.warn('activate blocking', op.context.url)
     // perform retry operation.
     retryingOp = op
     // only capture refresh's error.
     let refreshError: Error | null = null
     try {
       await onRetry().catch((e) => (refreshError = e))
-      if (refreshError) {
-        throw refreshError
-      }
       // lift blockage.
       retryingOp = undefined
-      // re call last-op
-      return op.fetch() // This should have the pipeline re-run
+      if (refreshError) {
+        // console.info('>> REFRESH ERROR', op.context.url, refreshError)
+        throw refreshError
+      }
     } catch (e) {
+      // console.error('>>>>>>> ON', op.context.url, e)
       // TODO: Log the `e`
       return result // return original result!
     } finally {
+      // console.warn('released pending ops by', op.context.url)
       // invoke the rest, using pop + while loop to ensure no race condition.
       do {
         blockedOps.pop()?.(refreshError)
       } while (blockedOps.length > 0)
     }
+    // re call last-op
+    throw new RetryRequest()
+    //    return op.fetch() // This should have the pipeline re-run
   }
 }
