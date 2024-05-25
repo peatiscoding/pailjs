@@ -1,11 +1,17 @@
-import Koa from 'koa'
-import { createToken, verifyToken } from './token'
+const process = require('node:process')
+const Koa = require('koa')
+const { createToken, verifyToken } = require('./token')
 
 const REFRESH_TOKEN = 'refreshmeh'
 
-export class FakeAuthServer {
-  public start(port: number = 3500) {
+class FakeAuthServer {
+  start(port = 3500) {
     const app = new Koa()
+
+    app.use(async (ctx, next) => {
+      console.log('>>', ctx.method, ctx.url)
+      await next()
+    })
 
     // public endpoint
     app.use(async (ctx, next) => {
@@ -35,13 +41,19 @@ export class FakeAuthServer {
     app.use(async (ctx, next) => {
       // TODO: Validate the token
       const authHeader = ctx.headers['authorization']
-      const token = (authHeader || '').replace(/^bearer\s*/i, '')
+      const token = (authHeader || '').replace(/^bearer\s*/i, '').trim()
       if (!token) {
-        ctx.response.status = 401
+        ctx.response.status = 403
         ctx.response.body = 'no token provided'
         return
       }
-      await verifyToken(token)
+      try {
+        await verifyToken(token)
+      } catch (e) {
+        ctx.response.status = 403
+        ctx.response.body = `Invalid access token: ${e.message}`
+        return
+      }
       await next()
     })
     app.use((ctx) => {
@@ -49,10 +61,23 @@ export class FakeAuthServer {
       ctx.body = JSON.stringify({ message: 'hello world' })
     })
 
-    app.listen(port)
+    app.listen(port, () => {
+      console.log(`listening on port ${port}`)
+    })
   }
 }
 
 const sv = new FakeAuthServer()
 
-sv.start()
+process.on('SIGTERM', function () {
+  process.stdout.write('Got SIGTERM. Shutting down.')
+  process.exit(0)
+})
+process.on('SIGINT', function () {
+  process.stdout.write('Got SIGINT. Shutting down.')
+  process.exit(0)
+})
+const port = process.argv[2] || 3500
+
+console.log('PORT', port)
+sv.start(+port)

@@ -9,7 +9,9 @@
     "prebuild": "rm -fr ./dist/",
     "build": "tsc -p tsconfig.json",
     "lint": "eslint . --max-warnings 0",
+    "pretest": "node ./__tests__/fake-auth-server/server.js 3500 &",
     "test": "jest --config ./jest.config.js",
+    "posttest": "kill -9 $(lsof -i :3500 | grep node | awk '{ print $2 }')",
     "prepublish": "cp ../../README.md ./README.md",
     "publish": "pnpm publish --access public",
     "postpublish": "rm ./README.md"
