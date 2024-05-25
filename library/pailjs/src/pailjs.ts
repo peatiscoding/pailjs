@@ -280,7 +280,7 @@ export class _FetchBuilderOp<T = Response> implements IFetchBuilderOp<T> {
     return c
   }
 
-  public async fetch(): Promise<T> {
+  public async fetch(attempt = 0): Promise<T> {
     // compile options for calling fetch
     // run fetch and perform retry if necessary
     const context = this.computeContext()
@@ -310,7 +310,10 @@ export class _FetchBuilderOp<T = Response> implements IFetchBuilderOp<T> {
     } catch (e) {
       if (e instanceof RetryRequest) {
         // re-try!
-        return this.fetch()
+        if (attempt > 3) {
+          throw new Error('Cannot retry more than 3 times')
+        }
+        return this.fetch(attempt + 1)
       }
       throw e
     }
