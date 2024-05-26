@@ -1,6 +1,6 @@
 {
   "name": "pailjs",
-  "version": "0.0.4",
+  "version": "0.0.5",
   "description": "PailJS boiler plate for fetch (nodejs)",
   "main": "dist/src/index.js",
   "module": "dist/src/index.js",
