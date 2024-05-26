@@ -73,4 +73,17 @@ describe('Fake Auth Service', () => {
     const result = await attempt
     expect(result).toEqual({ message: 'Hello, world' })
   })
+
+  it('will block multiple services from performing refresh', async () => {
+    sv.setToken('$broken_token')
+    const spy = jest.spyOn(sv, 'refresh')
+    const attempts = [sv.sayHi('5'), sv.sayHi('6'), sv.sayHi('7'), sv.sayHi('8'), sv.sayHi('9')]
+    for (const attempt of attempts) {
+      await expect(attempt).resolves.not.toThrow()
+      const result = await attempt
+      expect(result).toEqual({ message: 'Hello, world' })
+    }
+    expect(spy).toHaveBeenCalledTimes(1)
+    spy.mockRestore()
+  })
 })

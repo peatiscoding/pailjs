@@ -24,6 +24,7 @@ class FakeAuthServer {
         return
       }
       if (ctx.url === '/refresh' && ctx.method === 'POST') {
+        await new Promise((resolve) => setTimeout(resolve, 300))
         const body = ctx.request.body
         const refreshToken = body.refresh_token
         if (refreshToken !== REFRESH_TOKEN) {
