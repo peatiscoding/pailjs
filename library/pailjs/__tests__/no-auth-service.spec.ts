@@ -92,7 +92,7 @@ describe('no auth service', () => {
       id: z.number(),
       result: z.object({
         absoluteSlot: z.number(),
-        blockHeight: z.number(),
+        blockHeight: z.number().transform((d) => d.toString()),
         epoch: z.number(),
         slotIndex: z.number(),
         slotsInEpoch: z.number(),
@@ -164,6 +164,7 @@ describe('no auth service', () => {
       expect(result.jsonrpc).toBe('2.0')
       expect(result.result).toBeTruthy()
       expect(typeof result.result?.epoch).toEqual('number')
+      expect(typeof result.result?.blockHeight).toEqual('string')
     })
 
     it('will throw an error for invalid RPC method', async () => {
