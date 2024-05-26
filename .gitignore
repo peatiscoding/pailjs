@@ -36,3 +36,6 @@ yarn-error.log*
 # Misc
 .DS_Store
 *.pem
+
+# automatically published content via npm script
+library/pailjs/README.md
