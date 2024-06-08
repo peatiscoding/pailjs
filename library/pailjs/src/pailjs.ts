@@ -8,7 +8,10 @@ import type {
   HttpBody,
   IFetchBuilderOp,
   MarshalTypeMorpher,
+  PailOptions,
 } from './interface'
+
+const MAX_RETRY_COUNT = 3
 
 export const _helpers = {
   /**
@@ -140,15 +143,47 @@ export class Pail<T = Response> {
    */
   protected context: IFetchBaseContext<T>
 
+  public constructor(baseUrl: string)
+  public constructor(baseUrl: string, options: PailOptions<T>)
+  // For Backward compatibility
   public constructor(
     baseUrl: string,
-    headers: Record<string, string | undefined> = {},
-    onMarshalResponse: MarshalTypeMorpher<T, any>[] = [],
+    headers: Record<string, string | undefined>,
+    onMarshalResponse: MarshalTypeMorpher<T, any>[],
+  )
+  constructor(
+    baseUrl: string,
+    headersOrOptions: PailOptions<T> | Record<string, string | undefined> = {},
+    _onMarshalResponse?: MarshalTypeMorpher<T, any>[],
   ) {
+    let maxRetryCount: number = MAX_RETRY_COUNT
+    let staticHeaders: Record<string, string | undefined> = {}
+    let onMarshalResponse: MarshalTypeMorpher<T, any>[] = _onMarshalResponse ?? []
+    if (headersOrOptions.onMarshalResponse && typeof headersOrOptions.onMarshalResponse !== 'string') {
+      // these are options
+      const opts = headersOrOptions as PailOptions<T>
+      // opts.onMarshalResponse
+      onMarshalResponse = opts.onMarshalResponse
+      // opts.headers
+      if (opts.headers) {
+        staticHeaders = {
+          ...staticHeaders,
+          ...(opts.headers ?? {}),
+        }
+      }
+      // opts.maxRetryCount
+      if (opts.maxRetryCount) {
+        maxRetryCount = opts.maxRetryCount
+      }
+    } else {
+      // these are headers only
+      staticHeaders = headersOrOptions as Record<string, string | undefined>
+    }
     this.context = {
       baseUrl,
-      headers,
+      headers: staticHeaders,
       onMarshalResponse,
+      maxRetryCount,
     }
   }
 
@@ -310,8 +345,9 @@ export class _FetchBuilderOp<T = Response> implements IFetchBuilderOp<T> {
     } catch (e) {
       if (e instanceof RetryRequest) {
         // re-try!
-        if (attempt > 3) {
-          throw new Error('Cannot retry more than 3 times')
+        const maxRetryCount = context.maxRetryCount
+        if (attempt > maxRetryCount) {
+          throw new Error(`Cannot retry more than ${maxRetryCount} times.`)
         }
         return this.fetch(attempt + 1)
       }

@@ -34,6 +34,11 @@ export interface IFetchBaseContext<T> {
    * by default this will return the plain/text unless content-type is application/json
    */
   onMarshalResponse: MarshalTypeMorpher<T, any>[]
+
+  /**
+   * maximum number of retry count
+   */
+  maxRetryCount: number
 }
 
 export interface IFetchRequest<T> extends IFetchBaseContext<T> {
@@ -77,3 +82,30 @@ export interface IFetchBuilderOp<T> {
 export type FetchPipeline = <T>(fetchContext: IFetchRequest<T>) => IFetchRequest<T>
 
 export type FetchPipelineCondition = <T>(fetchContext: IFetchRequest<T>) => boolean
+
+export interface PailOptions<T> {
+  /**
+   * number of maximum of retry count per operation. This value works in conjunction with
+   * RetryRequest where marshal method throws `RetryRequest`. The operation will attempt
+   * to retry the same original request and track the number of retries executed.
+   * Once it reached this threashold, the `RetryRequest` within marshal will be ignored.
+   *
+   * @default 3
+   */
+  maxRetryCount?: number
+
+  /**
+   * base headers those will be used to merged for
+   * every requests
+   */
+  headers?: Record<string, string | undefined>
+
+  /**
+   * this callback can be used to validate the fetch response object. It morph the response to new Type <T>
+   *
+   * if given result is not as needed; or falsy (contains 'error' node) throw error instead of resolve it.
+   *
+   * by default this will return the plain/text unless content-type is application/json
+   */
+  onMarshalResponse: MarshalTypeMorpher<T, any>[]
+}

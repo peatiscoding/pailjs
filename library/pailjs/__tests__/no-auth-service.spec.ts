@@ -16,7 +16,7 @@ describe('no auth service', () => {
           volumeUsd24Hr: z.string(),
           priceUsd: z.string(),
           changePercent24Hr: z.string(),
-          vwap24Hr: z.string(),
+          vwap24Hr: z.string().nullable(),
         }),
       ),
     })
